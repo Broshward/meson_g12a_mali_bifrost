@@ -1,11 +1,12 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  *
- * (C) COPYRIGHT 2010-2018 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2021 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
- * of such GNU licence.
+ * of such GNU license.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -16,11 +17,7 @@
  * along with this program; if not, you can access it online at
  * http://www.gnu.org/licenses/gpl-2.0.html.
  *
- * SPDX-License-Identifier: GPL-2.0
- *
  */
-
-
 
 /*
  * Power management API definitions used internally by GPU backend
@@ -142,13 +139,12 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume);
  *
  * @kbdev:      The kbase device structure for the device (must be a valid
  *              pointer)
- * @is_suspend: true if clock off due to suspend, false otherwise
  *
  * Return: true  if clock was turned off, or
  *         false if clock can not be turned off due to pending page/bus fault
  *               workers. Caller must flush MMU workqueues and retry
  */
-bool kbase_pm_clock_off(struct kbase_device *kbdev, bool is_suspend);
+bool kbase_pm_clock_off(struct kbase_device *kbdev);
 
 /**
  * kbase_pm_enable_interrupts - Enable interrupts on the device.
@@ -206,6 +202,30 @@ int kbase_pm_init_hw(struct kbase_device *kbdev, unsigned int flags);
  */
 void kbase_pm_reset_done(struct kbase_device *kbdev);
 
+#if MALI_USE_CSF
+/**
+ * kbase_pm_wait_for_desired_state - Wait for the desired power state to be
+ *                                   reached
+ *
+ * Wait for the L2 and MCU state machines to reach the states corresponding
+ * to the values of 'kbase_pm_is_l2_desired' and 'kbase_pm_is_mcu_desired'.
+ *
+ * The usual use-case for this is to ensure that all parts of GPU have been
+ * powered up after performing a GPU Reset.
+ *
+ * Unlike kbase_pm_update_state(), the caller must not hold hwaccess_lock,
+ * because this function will take that lock itself.
+ *
+ * NOTE: This may not wait until the correct state is reached if there is a
+ * power off in progress and kbase_pm_context_active() was called instead of
+ * kbase_csf_scheduler_pm_active().
+ *
+ * @kbdev: The kbase device structure for the device (must be a valid pointer)
+ *
+ * Return: 0 on success, error code on error
+ */
+int kbase_pm_wait_for_desired_state(struct kbase_device *kbdev);
+#else
 /**
  * kbase_pm_wait_for_desired_state - Wait for the desired power state to be
  *                                   reached
@@ -219,16 +239,23 @@ void kbase_pm_reset_done(struct kbase_device *kbdev);
  * Unlike kbase_pm_update_state(), the caller must not hold hwaccess_lock,
  * because this function will take that lock itself.
  *
+ * NOTE: This may not wait until the correct state is reached if there is a
+ * power off in progress. To correctly wait for the desired state the caller
+ * must ensure that this is not the case by, for example, calling
+ * kbase_pm_wait_for_poweroff_complete()
+ *
  * @kbdev: The kbase device structure for the device (must be a valid pointer)
+ *
+ * Return: 0 on success, error code on error
  */
-void kbase_pm_wait_for_desired_state(struct kbase_device *kbdev);
+int kbase_pm_wait_for_desired_state(struct kbase_device *kbdev);
+#endif
 
 /**
  * kbase_pm_wait_for_l2_powered - Wait for the L2 cache to be powered on
  *
- * Wait for the L2 to be powered on, and for the L2 and shader state machines to
- * stabilise by reaching the states corresponding to the values of 'l2_desired'
- * and 'shaders_desired'.
+ * Wait for the L2 to be powered on, and for the L2 and the state machines of
+ * its dependent stack components to stabilise.
  *
  * kbdev->pm.active_count must be non-zero when calling this function.
  *
@@ -240,9 +267,23 @@ void kbase_pm_wait_for_desired_state(struct kbase_device *kbdev);
 void kbase_pm_wait_for_l2_powered(struct kbase_device *kbdev);
 
 /**
+ * kbase_pm_update_dynamic_cores_onoff - Update the L2 and shader power state
+ *                                       machines after changing shader core
+ *                                       availability
+ *
+ * It can be called in any status, so need to check the l2 and shader core
+ * power status in this function or it will break shader/l2 state machine
+ *
+ * Caller must hold hwaccess_lock
+ *
+ * @kbdev: The kbase device structure for the device (must be a valid pointer)
+ */
+void kbase_pm_update_dynamic_cores_onoff(struct kbase_device *kbdev);
+
+/**
  * kbase_pm_update_cores_state_nolock - Variant of kbase_pm_update_cores_state()
  *                                      where the caller must hold
- *                                      kbase_device.pm.power_change_lock
+ *                                      kbase_device.hwaccess_lock
  *
  * @kbdev: The kbase device structure for the device (must be a valid pointer)
  */
@@ -449,7 +490,8 @@ void kbase_pm_register_access_enable(struct kbase_device *kbdev);
 void kbase_pm_register_access_disable(struct kbase_device *kbdev);
 
 /* NOTE: kbase_pm_is_suspending is in mali_kbase.h, because it is an inline
- * function */
+ * function
+ */
 
 /**
  * kbase_pm_metrics_is_active - Check if the power management metrics
@@ -482,10 +524,8 @@ void kbase_pm_do_poweron(struct kbase_device *kbdev, bool is_resume);
  *
  * @kbdev:      The kbase device structure for the device (must be a valid
  *              pointer)
- * @is_suspend: true if power off due to suspend,
- *              false otherwise
  */
-void kbase_pm_do_poweroff(struct kbase_device *kbdev, bool is_suspend);
+void kbase_pm_do_poweroff(struct kbase_device *kbdev);
 
 #if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
 void kbase_pm_get_dvfs_metrics(struct kbase_device *kbdev,
@@ -495,8 +535,22 @@ void kbase_pm_get_dvfs_metrics(struct kbase_device *kbdev,
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 
+#if MALI_USE_CSF
 /**
- * kbase_platform_dvfs_event - Report utilisation to DVFS code
+ * kbase_platform_dvfs_event - Report utilisation to DVFS code for CSF GPU
+ *
+ * Function provided by platform specific code when DVFS is enabled to allow
+ * the power management metrics system to report utilisation.
+ *
+ * @kbdev:         The kbase device structure for the device (must be a
+ *                 valid pointer)
+ * @utilisation:   The current calculated utilisation by the metrics system.
+ * Return:         Returns 0 on failure and non zero on success.
+ */
+int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation);
+#else
+/**
+ * kbase_platform_dvfs_event - Report utilisation to DVFS code for JM GPU
  *
  * Function provided by platform specific code when DVFS is enabled to allow
  * the power management metrics system to report utilisation.
@@ -509,10 +563,11 @@ void kbase_pm_get_dvfs_metrics(struct kbase_device *kbdev,
  *                 group.
  * Return:         Returns 0 on failure and non zero on success.
  */
-
 int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation,
-	u32 util_gl_share, u32 util_cl_share[2]);
+			      u32 util_gl_share, u32 util_cl_share[2]);
 #endif
+
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 void kbase_pm_power_changed(struct kbase_device *kbdev);
 
@@ -609,16 +664,156 @@ void kbase_pm_protected_override_disable(struct kbase_device *kbdev);
  */
 void kbase_pm_protected_l2_override(struct kbase_device *kbdev, bool override);
 
+/**
+ * kbase_pm_protected_entry_override_enable - Enable the protected mode entry
+ *                                            override
+ * @kbdev: Device pointer
+ *
+ * Initiate a GPU reset and enable the protected mode entry override flag if
+ * l2_always_on WA is enabled and platform is fully coherent. If the GPU
+ * reset is already ongoing then protected mode entry override flag will not
+ * be enabled and function will have to be called again.
+ *
+ * When protected mode entry override flag is enabled to power down L2 via GPU
+ * reset, the GPU reset handling behavior gets changed. For example call to
+ * kbase_backend_reset() is skipped, Hw counters are not re-enabled and L2
+ * isn't powered up again post reset.
+ * This is needed only as a workaround for a Hw issue where explicit power down
+ * of L2 causes a glitch. For entering protected mode on fully coherent
+ * platforms L2 needs to be powered down to switch to IO coherency mode, so to
+ * avoid the glitch GPU reset is used to power down L2. Hence, this function
+ * does nothing on systems where the glitch issue isn't present.
+ *
+ * Caller must hold hwaccess_lock. Should be only called during the transition
+ * to enter protected mode.
+ *
+ * Return: -EAGAIN if a GPU reset was required for the glitch workaround but
+ * was already ongoing, otherwise 0.
+ */
+int kbase_pm_protected_entry_override_enable(struct kbase_device *kbdev);
+
+/**
+ * kbase_pm_protected_entry_override_disable - Disable the protected mode entry
+ *                                             override
+ * @kbdev: Device pointer
+ *
+ * This shall be called once L2 has powered down and switch to IO coherency
+ * mode has been made. As with kbase_pm_protected_entry_override_enable(),
+ * this function does nothing on systems where the glitch issue isn't present.
+ *
+ * Caller must hold hwaccess_lock. Should be only called during the transition
+ * to enter protected mode.
+ */
+void kbase_pm_protected_entry_override_disable(struct kbase_device *kbdev);
+
 /* If true, the driver should explicitly control corestack power management,
  * instead of relying on the Power Domain Controller.
  */
 extern bool corestack_driver_control;
 
-/* If true, disable powering-down of individual cores, and just power-down at
- * the top-level using platform-specific code.
- * If false, use the expected behaviour of controlling the individual cores
- * from within the driver.
+/**
+ * kbase_pm_is_l2_desired - Check whether l2 is desired
+ *
+ * @kbdev: Device pointer
+ *
+ * This shall be called to check whether l2 is needed to power on
+ *
+ * Return: true if l2 need to power on
  */
-extern bool platform_power_down_only;
+bool kbase_pm_is_l2_desired(struct kbase_device *kbdev);
+
+#if MALI_USE_CSF
+/**
+ * kbase_pm_is_mcu_desired - Check whether MCU is desired
+ *
+ * @kbdev: Device pointer
+ *
+ * This shall be called to check whether MCU needs to be enabled.
+ *
+ * Return: true if MCU needs to be enabled.
+ */
+bool kbase_pm_is_mcu_desired(struct kbase_device *kbdev);
+
+/**
+ * kbase_pm_idle_groups_sched_suspendable - Check whether the scheduler can be
+ *                                        suspended to low power state when all
+ *                                        the CSGs are idle
+ *
+ * @kbdev: Device pointer
+ *
+ * Return: true if allowed to enter the suspended state.
+ */
+static inline
+bool kbase_pm_idle_groups_sched_suspendable(struct kbase_device *kbdev)
+{
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+
+	return !(kbdev->pm.backend.csf_pm_sched_flags &
+		 CSF_DYNAMIC_PM_SCHED_IGNORE_IDLE);
+}
+
+/**
+ * kbase_pm_no_runnables_sched_suspendable - Check whether the scheduler can be
+ *                                        suspended to low power state when
+ *                                        there are no runnable CSGs.
+ *
+ * @kbdev: Device pointer
+ *
+ * Return: true if allowed to enter the suspended state.
+ */
+static inline
+bool kbase_pm_no_runnables_sched_suspendable(struct kbase_device *kbdev)
+{
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+
+	return !(kbdev->pm.backend.csf_pm_sched_flags &
+		 CSF_DYNAMIC_PM_SCHED_NO_SUSPEND);
+}
+
+/**
+ * kbase_pm_no_mcu_core_pwroff - Check whether the PM is required to keep the
+ *                               MCU core powered in accordance to the active
+ *                               power management policy
+ *
+ * @kbdev: Device pointer
+ *
+ * Return: true if the MCU is to retain powered.
+ */
+static inline bool kbase_pm_no_mcu_core_pwroff(struct kbase_device *kbdev)
+{
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+
+	return kbdev->pm.backend.csf_pm_sched_flags &
+		CSF_DYNAMIC_PM_CORE_KEEP_ON;
+}
+#endif
+
+/**
+ * kbase_pm_lock - Lock all necessary mutexes to perform PM actions
+ *
+ * @kbdev: Device pointer
+ *
+ * This function locks correct mutexes independent of GPU architecture.
+ */
+static inline void kbase_pm_lock(struct kbase_device *kbdev)
+{
+#if !MALI_USE_CSF
+	mutex_lock(&kbdev->js_data.runpool_mutex);
+#endif /* !MALI_USE_CSF */
+	mutex_lock(&kbdev->pm.lock);
+}
+
+/**
+ * kbase_pm_unlock - Unlock mutexes locked by kbase_pm_lock
+ *
+ * @kbdev: Device pointer
+ */
+static inline void kbase_pm_unlock(struct kbase_device *kbdev)
+{
+	mutex_unlock(&kbdev->pm.lock);
+#if !MALI_USE_CSF
+	mutex_unlock(&kbdev->js_data.runpool_mutex);
+#endif /* !MALI_USE_CSF */
+}
 
 #endif /* _KBASE_BACKEND_PM_INTERNAL_H_ */

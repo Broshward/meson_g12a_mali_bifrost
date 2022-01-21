@@ -73,10 +73,19 @@ struct kbase_hwcnt_backend_gpu {
 static u64 kbasep_hwcnt_backend_gpu_timestamp_ns(
 	struct kbase_hwcnt_backend *backend)
 {
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+	struct timespec64 ts;
+#else
 	struct timespec ts;
+#endif
 
 	(void)backend;
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 6, 0)
+	ktime_get_raw_ts64(&ts);
+#else
 	getrawmonotonic(&ts);
+#endif
 	return (u64)ts.tv_sec * NSEC_PER_SEC + ts.tv_nsec;
 }
 

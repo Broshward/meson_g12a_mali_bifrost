@@ -1,11 +1,12 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  *
- * (C) COPYRIGHT 2018 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2018, 2020 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
- * of such GNU licence.
+ * of such GNU license.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,8 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, you can access it online at
  * http://www.gnu.org/licenses/gpl-2.0.html.
- *
- * SPDX-License-Identifier: GPL-2.0
  *
  */
 
@@ -133,5 +132,14 @@ int kbase_hwcnt_accumulator_dump(
 	u64 *ts_start_ns,
 	u64 *ts_end_ns,
 	struct kbase_hwcnt_dump_buffer *dump_buf);
+
+/**
+ * kbase_hwcnt_accumulator_timestamp_ns() - Get the current accumulator backend
+ *                                          timestamp.
+ * @accum: Non-NULL pointer to the hardware counter accumulator.
+ *
+ * Return: Accumulator backend timestamp in nanoseconds.
+ */
+u64 kbase_hwcnt_accumulator_timestamp_ns(struct kbase_hwcnt_accumulator *accum);
 
 #endif /* _KBASE_HWCNT_ACCUMULATOR_H_ */
