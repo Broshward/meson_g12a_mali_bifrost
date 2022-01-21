@@ -3391,7 +3391,7 @@ static int kbase_jd_user_buf_map(struct kbase_context *kctx,
 			reg->flags & KBASE_REG_GPU_WR ? FOLL_WRITE : 0,
 			pages, NULL);
 #else
-#include <linux/mm.h>
+#include <linux/mm_types.h>
 	pinned_pages = get_user_pages_remote(NULL, mm,
 			address,
 			alloc->imported.user_buf.nr_pages,
