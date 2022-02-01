@@ -1,7 +1,7 @@
 Mali Bifrost support for Amlogic Meson G12A Family
 ==================================================
 
-***Big Big Fat Warning: I make update this for 5.16 kernel version, but I not see increasing video performance with mali_kbase module on my Khadas VIM3 device :(
+***Big Big Fat Warning: I make update this for 5.16 kernel version (Branch "5.16"), but I not see increasing video performance with loaded mali_kbase module on my Khadas VIM3 device :(
 
 **Big Fat Warning: This is still in development**
 
